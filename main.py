@@ -1,5 +1,5 @@
 import argparse
-from cli import create, list, show, update, ready, close, block, comment, log
+from cli import init, create, list, show, update, ready, close, block, comment, log
 
 def main():
     parser = argparse.ArgumentParser(
@@ -9,6 +9,7 @@ def main():
 
     sub = parser.add_subparsers(dest="command", required=True)
 
+    init.register(sub)
     create.register(sub)
     list.register(sub)
     show.register(sub)

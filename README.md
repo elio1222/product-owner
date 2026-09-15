@@ -76,7 +76,7 @@ Unit tests will be done in tests/ to validate and ensure integrity for business 
 The only required flag is `--title`. Everything else is optional and has a sensible default.
 
 ```
-po create --title <text> [--type <type>] [--priority <0-3>] [--desc <text>] [--assignee <name>] [--parent <id>]
+po create --title <text> [--type <type>] [--priority <0-3>] [--desc <text>] [--parent <id>]
 ```
 
 ### Flags
@@ -104,9 +104,6 @@ Without type, everything looks like a task and you lose that signal. With type, 
 | `task`     | A discrete unit of work with a clear deliverable. The default. | The code is shipped or the thing is done. |
 | `bug`      | Something that's broken and needs to be fixed. Implies regression — something that *was* working isn't. | The regression is resolved and verified. |
 | `feature`  | New capability that doesn't exist yet. Distinct from `task` because it has a user-facing outcome. | The capability is working and observable. |
-| `epic`     | A named theme that groups related child issues. Not work itself — it's a container. You don't `ready` an epic, you decompose it into tasks. | All child issues are closed. |
-| `spike`    | Time-boxed research or exploration. The output is a finding or a decision, not shipped code. Set a time limit in `--desc`. | You've produced the finding. Spikes should *always* produce a `decision` issue when closed. |
-| `decision` | A documented architectural or design choice. Not a to-do — it's a permanent record of *why* something was done a certain way. | Decisions don't get "done" in the normal sense. Closing one means the decision was superseded or reversed — which should create a new `decision`. |
 
 **Practical guidance:**
 
@@ -146,33 +143,20 @@ If `--desc` is more than a sentence, it's doing real work.
 
 ---
 
-#### `--assignee` (optional)
-
-Free-form string. Can be your name, `self`, an agent ID like `claude-agent-1`, or anything you want to filter by later. No validation — it's just a label.
-
-```
-po create --title "Implement list filters" --assignee self
-po create --title "Generate test fixtures" --assignee claude
-```
-
-This becomes useful with `po list --assignee claude` to see what's been handed to an agent.
-
----
-
 #### `--parent` (optional)
 
 The ID of an `epic` this issue belongs to. Inserts a `parent` edge in the `dependencies` table automatically. You don't need to call `po block` separately.
 
 ```
 po create --title "Build auth system" --type epic
-# → #1 created
+# → 63e9bf created
 
-po create --title "Implement JWT generation" --type task --parent 1
-po create --title "Write token refresh logic" --type task --parent 1
-po create --title "Decide on token expiry duration" --type decision --parent 1
+po create --title "Implement JWT generation" --type task --parent 63e9bf
+po create --title "Write token refresh logic" --type task --parent 63e9bf
+po create --title "Decide on token expiry duration" --type decision --parent 63e9bf
 ```
 
-`po show 1` will list all children. `po list --type task` will show them in the main queue.
+`po show 63e9bf` will list all children. `po list --type task` will show them in the main queue.
 
 ---
 
@@ -194,14 +178,15 @@ po create \
 ```
 # Start a new feature with child tasks
 po create --title "Search capability" --type epic
-po create --title "Add FTS5 to SQLite schema" --type task --parent 1 --priority 1
-po create --title "Wire --search flag into list command" --type task --parent 1 --priority 1
-po create --title "Spike: FTS5 query performance" --type spike --parent 1 --priority 0 \
+# → a3f1c2 created
+po create --title "Add FTS5 to SQLite schema" --type task --parent a3f1c2 --priority 1
+po create --title "Wire --search flag into list command" --type task --parent a3f1c2 --priority 1
+po create --title "Spike: FTS5 query performance" --type spike --parent a3f1c2 --priority 0 \
   --desc "Max 1 hour. How does FTS5 perform on 10k issues? Check MATCH syntax."
 
 # Normal task flow
-po ready 2
-po done 2
+po ready b7d92e
+po done b7d92e
 po list --status open
 ```
 
@@ -209,46 +194,47 @@ po list --status open
 
 ## Data Model
 
-Four tables. All IDs are auto-increment integers referenced as `#1`, `#2`, etc.
+Four tables. Issue IDs are 6-character SHA-256 hex prefixes derived from the issue's content fields.
 
 ### issues
 
-| Column       | Type    | Notes                                               |
-|--------------|---------|-----------------------------------------------------|
-| id           | INTEGER | Primary key, auto-increment                        |
-| title        | VARCHAR    | Required                                           |
-| description  | TEXT    | Optional long-form                                 |
-| status       | VARCHAR    | See status vocabulary below                        |
-| priority     | INTEGER | 0 = critical, 1 = high, 2 = medium, 3 = low        |
-| issue_type   | VARCHAR    | See type vocabulary below                          |
-| created_at   | TEXT    | ISO 8601, set on insert                            |
-| updated_at   | TEXT    | ISO 8601, updated on any write                     |
+| Column     | Type    | Notes                                          |
+|------------|---------|------------------------------------------------|
+| hash_id    | TEXT    | Primary key; 6-char SHA-256 prefix             |
+| title      | TEXT    | Required                                       |
+| desc       | TEXT    | Optional long-form                             |
+| status     | TEXT    | Default `open`; see status vocabulary below    |
+| type       | TEXT    | Default `task`; see type vocabulary below      |
+| priority   | INTEGER | Default `2`; 0 = critical … 3 = low           |
+| parent     | TEXT    | FK → issues.hash_id; set by `--parent`         |
+| created_at | TEXT    | ISO 8601, set on insert                        |
+| updated_at | TEXT    | ISO 8601, null until first update              |
 
 ### dependencies
 
 | Column  | Type    | Notes                                         |
 |---------|---------|-----------------------------------------------|
-| id      | INTEGER | Primary key                                  |
-| from_id | INTEGER | FK → issues.id (the issue that does blocking)|
-| to_id   | INTEGER | FK → issues.id (the issue being blocked)     |
+| id      | INTEGER | Primary key                                       |
+| from_id | TEXT    | FK → issues.hash_id (the issue that does blocking)|
+| to_id   | TEXT    | FK → issues.hash_id (the issue being blocked)     |
 | type    | TEXT    | See edge type vocabulary below               |
 
 ### comments
 
 | Column     | Type    | Notes                       |
 |------------|---------|-----------------------------|
-| id         | INTEGER | Primary key                |
-| issue_id   | INTEGER | FK → issues.id             |
-| body       | TEXT    | Required                   |
-| author     | TEXT    | Optional                   |
-| created_at | TEXT    | ISO 8601                   |
+| id         | INTEGER | Primary key                     |
+| issue_id   | TEXT    | FK → issues.hash_id             |
+| body       | TEXT    | Required                        |
+| author     | TEXT    | Optional                        |
+| created_at | TEXT    | ISO 8601                        |
 
 ### events
 
 | Column     | Type    | Notes                                                    |
 |------------|---------|----------------------------------------------------------|
 | id         | INTEGER | Primary key                                             |
-| issue_id   | INTEGER | FK → issues.id                                         |
+| issue_id   | TEXT    | FK → issues.hash_id                                    |
 | action     | TEXT    | e.g. `created`, `status_changed`, `commented`, `blocked`|
 | payload    | TEXT    | JSON string with before/after values                   |
 | created_at | TEXT    | ISO 8601                                               |
