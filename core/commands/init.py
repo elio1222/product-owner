@@ -50,7 +50,8 @@ def setup_config(author: str | None, email: str | None, desc: str | None, projec
         "project": project,
         "author": author,
         "email": email,
-        "description": desc
+        "description": desc,
+        "database_path": str(DB_PATH)
     }
 
     with open(config_file, "w") as file:
