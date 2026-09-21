@@ -22,16 +22,16 @@ product-owner/
 │   ├── show.py
 │   ├── update.py
 │   ├── ready.py
-│   ├── done.py
+│   ├── close.py
 │   ├── block.py
 │   ├── comment.py
 │   └── log.py
 ├── core/            # business logic, no argparse here
 │   ├── commands/    # cli logic
-│   |    ├── *.py    # logic for each subcommand in cli/ 
-│   ├── db.py        # SQLite connection, schema migrations
-│   ├── schemas.py   # Pydantic Models: Issue
-│   └── queries.py   # reusable SQL helpers
+│   |    ├── *.py    # logic for each subcommand in cli/
+│   ├── db.py        # SQLite connection, schema, and all SQL statements
+│   ├── schemas.py   # Pydantic Models: Issue, Dependency, Comment, Event
+│   └── tools.py     # shared helpers (e.g. reading .po/config.json)
 └── .po/             # created at runtime by `po init`
     ├── database.sqlite
     └── config.json
@@ -54,20 +54,50 @@ Unit tests will be done in tests/ to validate and ensure integrity for business 
 
 ---
 
+## Implementation Status
+
+This README documents the intended contract for every command, not just what's wired up today. Current state:
+
+| Command   | Status                                                                 |
+|-----------|-------------------------------------------------------------------------|
+| `init`    | Implemented — writes `.po/config.json`, creates tables               |
+| `create`  | Partially implemented — builds and validates the `Issue`, but does not yet persist it to the database |
+| `list`, `show`, `update`, `ready`, `close`, `block`, `comment`, `log` | Stubbed — `cli/*.py` and `core/commands/*.py` exist and register with `main.py`, but the underlying functions are `pass` (no-ops) |
+
+---
+
 ## Commands
 
-| Command   | Arguments / Flags                                       | Purpose                                               |
-|-----------|---------------------------------------------------------|-------------------------------------------------------|
-| `init`    | —                                                       | Create `.po/db.sqlite` and run schema migrations      |
-| `create`  | `--title` `--type` `--priority` `--desc` `--parent`  | Create a new issue; prints assigned ID  |
-| `list`    | `--status` `--type` `--blocked`            | Tabular list with optional filters                   |
-| `show`    | `<id>`                                                  | Full issue detail: fields, dependencies, comments    |
-| `update`  | `<id>` + any field flag from `create`                   | Patch any field on an existing issue                 |
-| `ready`   | `<id>`                                                  | Shortcut: status → `in_progress`                     |
-| `close`    | `<id>`                                                  | Shortcut: status → `closed`                          |
-| `block`   | `<from-id> <to-id>` `--type`                            | Declare a dependency edge between two issues         |
-| `comment` | `<id>` `--body` `--author`                              | Append a comment to an issue                         |
-| `log`     | `[id]`                                                  | Event history — global if no ID, per-issue otherwise |
+| Command   | Arguments / Flags                                                              | Purpose                                               |
+|-----------|---------------------------------------------------------------------------------|--------------------------------------------------------|
+| `init`    | `--author` `--email` `--project` `--desc` `--force` `--no-git-check`          | Create `.po/config.json` and `.po/database.sqlite`, run schema setup |
+| `create`  | `--title` (required) `--type` `--priority` `--desc` `--parent`                | Create a new issue; prints assigned ID                |
+| `list`    | `--status` `--type`                                                | Tabular list with optional filters                    |
+| `show`    | `<id>`                                                                          | Full issue detail: fields, dependencies, comments      |
+| `update`  | `<id>` `--status`                                                               | Patch an existing issue's status                       |
+| `ready`   | `<id>`                                                                          | Shortcut: status → `in_progress`                       |
+| `close`   | `<id>`                                                                          | Shortcut: status → `closed`                            |
+| `block`   | `<from_id> <to_id>` `--type`                                                    | Declare a dependency edge between two issues           |
+| `comment` | `<id>` `--body` `--author`                                                      | Append a comment to an issue                            |
+| `log`     | `[id]`                                                                          | Event history — global if no ID, per-issue otherwise   |
+
+---
+
+## `init` — Deep Dive
+
+```
+po init [--author <name>] [--email <email>] [--project <name>] [--desc <text>] [--force] [--no-git-check]
+```
+
+All flags are optional:
+
+- `--author` / `--email` — default to `git config user.name` / `user.email` if omitted.
+- `--project` — defaults to the current directory's name.
+- `--desc` — project description; stored as `null` if omitted.
+- `--force` — drops and recreates all tables, wiping any existing data.
+- `--no-git-check` — skips the prompt asking whether to `git init` the project if git isn't already set up.
+
+Running `init` writes `.po/config.json` (author, email, project, description, database path) and creates the four SQLite tables described in [Data Model](#data-model) below.
 
 ---
 
@@ -93,24 +123,21 @@ po create --title "Auth middleware returns 500 on expired token"
 
 ---
 
-#### `--type` (default: `task`)
+#### `--type` (default: `task`, choices: `task | bug | feature | chore`)
 
-This is where most of the semantic weight lives. The type isn't cosmetic — it tells you and any agent *how to process this issue*. A `spike` has a time constraint and produces knowledge, not code. A `decision` is a permanent record, not a to-do. An `epic` is a container, never work itself.
+This is where most of the semantic weight lives. The type isn't cosmetic — it tells you and any agent *how to process this issue*. `argparse` enforces the four values below; anything else is rejected at the CLI.
 
-Without type, everything looks like a task and you lose that signal. With type, `po list --type spike` gives you all your open research threads, `po list --type decision` is your architecture log.
-
-| Type       | What it is | When `done` means |
-|------------|------------|-------------------|
-| `task`     | A discrete unit of work with a clear deliverable. The default. | The code is shipped or the thing is done. |
-| `bug`      | Something that's broken and needs to be fixed. Implies regression — something that *was* working isn't. | The regression is resolved and verified. |
-| `feature`  | New capability that doesn't exist yet. Distinct from `task` because it has a user-facing outcome. | The capability is working and observable. |
+| Type      | What it is | When `close`d means |
+|-----------|------------|----------------------|
+| `task`    | A discrete unit of work with a clear deliverable. The default. | The code is shipped or the thing is done. |
+| `bug`     | Something that's broken and needs to be fixed. Implies regression — something that *was* working isn't. | The regression is resolved and verified. |
+| `feature` | New capability that doesn't exist yet. Distinct from `task` because it has a user-facing outcome. | The capability is working and observable. |
+| `chore`   | Maintenance work with no direct user-facing outcome (deps, tooling, cleanup). | The maintenance work is done. |
 
 **Practical guidance:**
 
 - If you're not sure, use `task`. The type system only earns its keep when you're actually filtering by it.
-- `epic` + `--parent` is how you model hierarchy. Create the epic first, then create tasks with `--parent <epic-id>`.
-- `spike` should almost always have a `--desc` with a time box: `"Max 2 hours. Goal: understand SQLite FTS5 query performance."`.
-- `decision` issues work well as a lightweight ADR (Architecture Decision Record). Write the reasoning in `--desc`.
+- There's no dedicated `epic` type yet — hierarchy is modeled purely with `--parent`, regardless of the parent issue's `type`. Create the container issue first (any type), then create children with `--parent <id>`.
 
 ---
 
@@ -135,8 +162,7 @@ Long-form context. Not shown in `list` output — only in `show`. Use it for:
 
 - Acceptance criteria on a `feature`
 - Reproduction steps on a `bug`
-- Time box and goal on a `spike`
-- Full reasoning on a `decision`
+- Maintenance notes on a `chore`
 - Links to relevant files or prior issues
 
 If `--desc` is more than a sentence, it's doing real work.
@@ -145,15 +171,15 @@ If `--desc` is more than a sentence, it's doing real work.
 
 #### `--parent` (optional)
 
-The ID of an `epic` this issue belongs to. Inserts a `parent` edge in the `dependencies` table automatically. You don't need to call `po block` separately.
+The ID of an existing issue this one belongs to (any type — there's no dedicated `epic` type). Inserts a `parent` edge in the `dependencies` table automatically. You don't need to call `po block` separately.
 
 ```
-po create --title "Build auth system" --type epic
+po create --title "Build auth system" --type task
 # → 63e9bf created
 
 po create --title "Implement JWT generation" --type task --parent 63e9bf
 po create --title "Write token refresh logic" --type task --parent 63e9bf
-po create --title "Decide on token expiry duration" --type decision --parent 63e9bf
+po create --title "Handle token expiry" --type chore --parent 63e9bf
 ```
 
 `po show 63e9bf` will list all children. `po list --type task` will show them in the main queue.
@@ -164,10 +190,10 @@ po create --title "Decide on token expiry duration" --type decision --parent 63e
 
 ```
 po create \
-  --title "Decide on output format for po show" \
-  --type decision \
+  --title "Add FTS5 search to list command" \
+  --type feature \
   --priority 1 \
-  --desc "Options: plain key-value, a rich table, or JSON for agent consumption. Pick one format and document why. Consider that agents need parseable output." \
+  --desc "Wire a --search flag into `po list` backed by SQLite FTS5. Acceptance: search matches on title and desc, case-insensitive." \
   --parent 3
 ```
 
@@ -177,16 +203,16 @@ po create \
 
 ```
 # Start a new feature with child tasks
-po create --title "Search capability" --type epic
+po create --title "Search capability" --type feature
 # → a3f1c2 created
 po create --title "Add FTS5 to SQLite schema" --type task --parent a3f1c2 --priority 1
 po create --title "Wire --search flag into list command" --type task --parent a3f1c2 --priority 1
-po create --title "Spike: FTS5 query performance" --type spike --parent a3f1c2 --priority 0 \
-  --desc "Max 1 hour. How does FTS5 perform on 10k issues? Check MATCH syntax."
+po create --title "Check FTS5 query performance on 10k issues" --type chore --parent a3f1c2 --priority 0 \
+  --desc "Max 1 hour. Check MATCH syntax and query plan."
 
 # Normal task flow
 po ready b7d92e
-po done b7d92e
+po close b7d92e
 po list --status open
 ```
 
@@ -214,10 +240,9 @@ Four tables. Issue IDs are 6-character SHA-256 hex prefixes derived from the iss
 
 | Column  | Type    | Notes                                         |
 |---------|---------|-----------------------------------------------|
-| id      | INTEGER | Primary key                                       |
-| from_id | TEXT    | FK → issues.hash_id (the issue that does blocking)|
-| to_id   | TEXT    | FK → issues.hash_id (the issue being blocked)     |
-| type    | TEXT    | See edge type vocabulary below               |
+| from_id | TEXT    | (PK) FK → issues.hash_id (the issue that does blocking)|
+| to_id   | TEXT    | (PK) FK → issues.hash_id (the issue being blocked)     |
+| type    | TEXT    | (PK) See edge type vocabulary below, default is blocks              |
 
 ### comments
 
@@ -251,7 +276,7 @@ Four tables. Issue IDs are 6-character SHA-256 hex prefixes derived from the iss
 | `in_progress` | Being worked on (set by `ready`)             |
 | `blocked`     | Cannot proceed; has an unresolved blocker    |
 | `deferred`    | Intentionally postponed                      |
-| `closed`      | Done (set by `done`)                         |
+| `closed`      | Done (set by `close`)                        |
 
 ### Issue Type
 
@@ -260,14 +285,14 @@ Four tables. Issue IDs are 6-character SHA-256 hex prefixes derived from the iss
 | `task`     | Normal flow: open → in_progress → closed         |
 | `bug`      | Normal flow. Implies a regression, not new work  |
 | `feature`  | Normal flow. Has a user-facing outcome           |
-| `chore`    | Normal flow. Has a user-facing outcome           |
+| `chore`    | Normal flow. No direct user-facing outcome       |
 
 ### Dependency Edge Types
 
 | Type      | Meaning                                                |
 |-----------|--------------------------------------------------------|
 | `blocks`  | `from_id` must be resolved before `to_id` can proceed |
-| `parent`  | `from_id` is a child of `to_id` (epic decomposition) |
+| `parent`  | `from_id` is a child of `to_id` (hierarchy, e.g. a container issue's sub-tasks) |
 | `related` | Soft link — informational, no enforcement             |
 
 ---
