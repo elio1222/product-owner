@@ -1,7 +1,7 @@
 import sqlite3
 from pathlib import Path
-from typing import Any
-from core.schemas import Issue
+from typing import Any, Union
+from core.schemas import Issue, Dependency, Comment, Event
 import json
 
 def get_database_config() -> Path:
@@ -79,16 +79,38 @@ FOREIGN KEY (issue_id) REFERENCES issues(hash_id)
 )
 """)
 
-def insert_data_model(conn: sqlite3.Connection, model_type: str, model: Any) -> str:
+def insert_data_model(conn: sqlite3.Connection, model_type: str, model: Union[Issue, Dependency, Comment, Event]) -> str | Exception:
 
+    insert_queries = {
+        "issues": "INSERT INTO issues (hash_id, title, desc, status, type, priority, parent, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "dependencies": "INSERT INTO dependencies (from_id, to_id, type) VALUES (?, ?, ?)",
+        "comments": "INSERT INTO comments (id, issue_id, body, author, created_at) VALUES (?, ?, ?, ?, ?)",
+        "events": "INSERT INTO events (id, issue_id, action, payload, created_at) VALUES (?, ?, ?, ?, ?)",
+    }
+
+    insert_params = {
+        "issues": lambda m: (m["hash_id"], m["title"], m["desc"], m["status"], m["type"], m["priority"], m["parent"], m["created_at"], m["updated_at"]),
+        "dependencies": lambda m: (m["from_id"], m["to_id"], m["type"]),
+        "comments": lambda m: (m["id"], m["issue_id"], m["body"], m["author"], m["created_at"]),
+        "events": lambda m: (m["id"], m["issue_id"], m["action"], m["payload"], m["created_at"]),
+    }
+
+    # validating model type before any connection begins
+    if model_type not in insert_queries:
+        return "invalid model_type"
+    
     database_path = get_database_config()
-    cur = connect_to_db(database_path)
+    conn = connect_to_db(database_path)
+
     # insert specified data model type (issue, comment, event)
 
-    if isinstance(model, Issue):
-        m = model.model_dump()
-        query = """"""
-        cur.execute(query, ())
-
-
-    return
+    with conn:
+        try:
+            cur = conn.cursor()
+            m = model.model_dump()
+            query = insert_queries[model_type]
+            params = insert_params[model_type](m)
+            cur.execute(query, params)
+            return "succesfully inserted values into db"
+        except Exception as e:
+            return e
