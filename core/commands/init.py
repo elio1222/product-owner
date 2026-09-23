@@ -29,7 +29,7 @@ def get_git_config(key: str) -> str | None:
     )
     return result.stdout.strip() or None
 
-def setup_config(author: str | None, email: str | None, desc: str | None, project: str | None) -> Path:
+def setup_config(*, project: str | None, author: str | None, email: str | None, desc: str, backend: str | None) -> Path:
 
     po_dir = Path(".po")
     #po_dir.resolve()
@@ -51,6 +51,7 @@ def setup_config(author: str | None, email: str | None, desc: str | None, projec
         "author": author,
         "email": email,
         "description": desc,
+        "backend": backend,
         "database_path": str(DB_PATH)
     }
 
@@ -59,9 +60,9 @@ def setup_config(author: str | None, email: str | None, desc: str | None, projec
 
     return Path(DB_PATH)
 
-def initialize_po(author: str | None, email: str | None, project: str | None, desc: str | None, force: bool, no_git_check: bool) -> None:
+def initialize_po(project: str | None, author: str | None, email: str | None, desc: str | None, backend: str, force: bool, no_git_check: bool) -> None:
 
-    database_path = setup_config(author, email, project, desc)
+    database_path = setup_config(project=project, author=author, email=email, desc=desc, backend=backend)
     conn = connect_to_db(database_path)
 
     # force re runs po init, overwriting everything
