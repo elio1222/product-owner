@@ -72,6 +72,7 @@ priority INTEGER DEFAULT 2,
 parent TEXT,
 created_at TEXT NOT NULL,
 updated_at TEXT,
+closed_at TEXT,
 FOREIGN KEY (parent) REFERENCES issues(hash_id)
 )
 """)

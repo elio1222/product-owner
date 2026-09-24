@@ -14,6 +14,7 @@ class Issue(BaseModel):
     parent: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: Optional[datetime] = None
+    closed_at: Optional[datetime] = None
 
     def model_post_init(self, __context):
         if not self.hash_id:

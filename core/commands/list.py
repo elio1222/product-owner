@@ -10,4 +10,7 @@ storage = StorageStrategy.from_config()
 
 def list_issues(status=str | None, type=str | None, priority=int | None):
     issues = storage.filter_all_issues(Issue, status, type, priority)
+    # closed issues stay in the table but are hidden unless asked for with --status closed
+    if status is None and issues:
+        issues = [i for i in issues if i["status"] != "closed"] or None
     print(format_issues(issues))

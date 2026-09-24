@@ -30,5 +30,11 @@ def update_issue(
     if type is not None:
         issue.type = type
 
-    issue.updated_at = datetime.now()
+    now = datetime.now()
+    if issue.status == "closed":
+        issue.closed_at = issue.closed_at or now
+    else:
+        issue.closed_at = None
+
+    issue.updated_at = now
     storage.update(issue)
