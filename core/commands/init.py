@@ -1,7 +1,7 @@
-from core.db import connect_to_db, create_default_tables, drop_all_tables
 from pathlib import Path
 import subprocess
 import json
+from storage.strategy import StorageStrategy
 
 def setup_git() -> None:
     subprocess.run(
@@ -32,8 +32,6 @@ def get_git_config(key: str) -> str | None:
 def setup_config(*, project: str | None, author: str | None, email: str | None, desc: str, backend: str | None) -> Path:
 
     po_dir = Path(".po")
-    #po_dir.resolve()
-
     DB_PATH = Path(".po/database.sqlite")
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
@@ -58,16 +56,17 @@ def setup_config(*, project: str | None, author: str | None, email: str | None, 
     with open(config_file, "w") as file:
         json.dump(data, file, indent=4)
 
-    return Path(DB_PATH)
+    return Path(config_file)
 
 def initialize_po(project: str | None, author: str | None, email: str | None, desc: str | None, backend: str, force: bool, no_git_check: bool) -> None:
 
-    database_path = setup_config(project=project, author=author, email=email, desc=desc, backend=backend)
-    conn = connect_to_db(database_path)
+    config_path = setup_config(project=project, author=author, email=email, desc=desc, backend=backend)
+
+    storage = StorageStrategy.from_config(config_path=config_path)
 
     # force re runs po init, overwriting everything
     if force:
-        drop_all_tables(conn)
+        storage.overwrite_db()
 
     # po is already initialized, this is commented out for development purposes
     # if Path(".po").is_dir() and not force:
@@ -88,6 +87,4 @@ def initialize_po(project: str | None, author: str | None, email: str | None, de
     
 
      # will drop all tables for initilization testing purposes
-    drop_all_tables(conn)
-
-    create_default_tables(conn)
+    storage.overwrite_db()
