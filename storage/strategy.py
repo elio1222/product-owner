@@ -128,6 +128,14 @@ class StorageStrategy:
         filters = {"from_id": from_id, "to_id": to_id}
         return self.backend.get_all_records(self._table_map[Dependency], filters, True) is not None
 
+    def get_dependents(self, id: str) -> list[str]:
+        """ids of the issues that `id` blocks"""
+        rows = self.backend.get_all_records(self._table_map[Dependency], {"from_id": id}, True) or []
+        return [d["to_id"] for d in rows]
+
+    def get_comments(self, id: str) -> list[dict]:
+        return self.backend.get_all_records(self._table_map[Comment], {"issue_id": id}, True) or []
+
     def add_dependency(self, from_id: str, to_id: str) -> None:
         self.insert(Dependency(from_id=from_id, to_id=to_id))
 
