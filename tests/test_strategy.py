@@ -76,3 +76,12 @@ def test_from_config_unknown_backend_raises(tmp_path, monkeypatch):
     _write_config(tmp_path, "mongo")
     with pytest.raises(ValueError):
         StorageStrategy.from_config()
+
+
+def test_add_dependency(storage, issue):
+    other = Issue(title="second")
+    storage.insert(issue)
+    storage.insert(other)
+    assert storage.dependency_exists(issue.hash_id, other.hash_id) is False
+    storage.add_dependency(issue.hash_id, other.hash_id)
+    assert storage.dependency_exists(issue.hash_id, other.hash_id) is True

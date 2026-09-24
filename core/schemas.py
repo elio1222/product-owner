@@ -25,7 +25,6 @@ class Issue(BaseModel):
 class Dependency(BaseModel):
     from_id: str
     to_id: str
-    type: str = "blocks"
 
 class Comment(BaseModel):
     id: int

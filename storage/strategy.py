@@ -41,21 +41,13 @@ class StorageStrategy:
 
 
         def get_configruations(config_path: Path | None = None) -> Tuple[str, Path]:
-
-            if config_path:
-                with open(config_file, "r") as file:
-                    config = json.load(file)
-
-                return config["backend"], config["database_path"]
-            
-            po_dir = Path(".po")
-            config_file = f"{po_dir}/config.json"
+            config_file = config_path or Path(".po/config.json")
 
             with open(config_file, "r") as file:
                 config = json.load(file)
 
             return config["backend"], config["database_path"]
-            
+
         backend_name, db_path = get_configruations(config_path=config_path)
 
         if not backend_name: # checks if backend name is None
@@ -117,6 +109,27 @@ class StorageStrategy:
             match_all = False
         records = self.backend.get_all_records(table, filters, match_all)
         return records
+
+    def create_dependency_edge(self, model: Model) -> None:
+        table = self._table_map[Dependency]
+        m = model.model_dump()
+        dependency_edges = {
+            "from_id": m["parent"],
+            "to_id": m["hash_id"]
+        }
+        self.backend.insert_record(table, dependency_edges)
+
+        # the issue is waiting on its parent, so it starts out blocked instead of open
+        model.status = "blocked"
+        self.update(model)
+
+    def dependency_exists(self, from_id: str, to_id: str) -> bool:
+        filters = {"from_id": from_id, "to_id": to_id}
+        return self.backend.get_all_records(self._table_map[Dependency], filters, True) is not None
+
+    def add_dependency(self, from_id: str, to_id: str) -> None:
+        self.insert(Dependency(from_id=from_id, to_id=to_id))
+
     def insert(self, model: Model) -> None:
         table = self._table_map[type(model)]
         self.backend.insert_record(table, model.model_dump())

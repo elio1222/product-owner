@@ -49,8 +49,7 @@ FOREIGN KEY (parent) REFERENCES issues(hash_id)
 CREATE TABLE IF NOT EXISTS dependencies (
 from_id TEXT NOT NULL REFERENCES issues(hash_id) ON DELETE CASCADE,
 to_id TEXT NOT NULL REFERENCES issues(hash_id) ON DELETE CASCADE,
-type TEXT NOT NULL DEFAULT 'blocks',
-PRIMARY KEY(from_id, to_id, type),
+PRIMARY KEY(from_id, to_id),
 CHECK (from_id != to_id)
 )
 """)
@@ -83,14 +82,14 @@ def insert_data_model(conn: sqlite3.Connection, model_type: str, model: Union[Is
 
     insert_queries = {
         "issues": "INSERT INTO issues (hash_id, title, desc, status, type, priority, parent, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        "dependencies": "INSERT INTO dependencies (from_id, to_id, type) VALUES (?, ?, ?)",
+        "dependencies": "INSERT INTO dependencies (from_id, to_id) VALUES (?, ?)",
         "comments": "INSERT INTO comments (id, issue_id, body, author, created_at) VALUES (?, ?, ?, ?, ?)",
         "events": "INSERT INTO events (id, issue_id, action, payload, created_at) VALUES (?, ?, ?, ?, ?)",
     }
 
     insert_params = {
         "issues": lambda m: (m["hash_id"], m["title"], m["desc"], m["status"], m["type"], m["priority"], m["parent"], m["created_at"], m["updated_at"]),
-        "dependencies": lambda m: (m["from_id"], m["to_id"], m["type"]),
+        "dependencies": lambda m: (m["from_id"], m["to_id"]),
         "comments": lambda m: (m["id"], m["issue_id"], m["body"], m["author"], m["created_at"]),
         "events": lambda m: (m["id"], m["issue_id"], m["action"], m["payload"], m["created_at"]),
     }

@@ -76,8 +76,7 @@ FOREIGN KEY (parent) REFERENCES issues(hash_id)
 CREATE TABLE IF NOT EXISTS dependencies (
 from_id TEXT NOT NULL REFERENCES issues(hash_id) ON DELETE CASCADE,
 to_id TEXT NOT NULL REFERENCES issues(hash_id) ON DELETE CASCADE,
-type TEXT NOT NULL DEFAULT 'blocks',
-PRIMARY KEY(from_id, to_id, type),
+PRIMARY KEY(from_id, to_id),
 CHECK (from_id != to_id)
 )
 """)
