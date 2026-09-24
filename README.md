@@ -10,6 +10,18 @@ A local-first, dependency-aware issue tracker for personal use and agent-driven 
 
 ---
 
+## Install
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e .      # installs the `po` command (entry point: main:main)
+po --help
+```
+
+Run `po init` in each project directory first; `po` reads `.po/` from the current directory.
+
+---
+
 ## Directory Layout
 
 ```
