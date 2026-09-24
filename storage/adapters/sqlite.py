@@ -29,8 +29,12 @@ class SqliteAdapter:
         joiner = " AND " if match_all else " OR "
         where_clause = joiner.join(f"{key} = ?" for key in filters)
         values = tuple(filters.values())
-        query = f"SELECT * FROM {table} WHERE {where_clause}"
-        rows = self.conn.execute(query, values).fetchall()
+        if not all(x is None for x in values):
+            query = f"SELECT * FROM {table} WHERE {where_clause}"
+            rows = self.conn.execute(query, values).fetchall()
+        else:
+            query = f"SELECT * FROM {table}"
+            rows = self.conn.execute(query).fetchall()
         result = [dict(row) for row in rows]
         return result if result else None
 

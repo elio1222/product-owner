@@ -8,6 +8,6 @@ if TYPE_CHECKING:
 
 storage = StorageStrategy.from_config()
 
-def list_issues(status=str | None, type=str | None):
-    issues = storage.filter_all_issues(Issue, status, type)
+def list_issues(status=str | None, type=str | None, priority=int | None):
+    issues = storage.filter_all_issues(Issue, status, type, priority)
     print(format_issues(issues))

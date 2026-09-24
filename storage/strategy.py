@@ -97,13 +97,14 @@ class StorageStrategy:
             return True
         return False
 
-    def filter_all_issues(self, model: Model, status: str | None, type: str | None = None) -> List[dict] | None:
+    def filter_all_issues(self, model: Model, status: str | None, type: str | None = None, priority: int | None = None) -> List[dict] | None:
         table = self._table_map[model]
         filters = {
             "status": status,
-            "type": type
+            "type": type,
+            "priority": priority
         }
-        if status and type:
+        if status and type and priority:
             match_all = True
         else:
             match_all = False
