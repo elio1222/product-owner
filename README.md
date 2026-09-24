@@ -61,8 +61,10 @@ This README documents the intended contract for every command, not just what's w
 | Command   | Status                                                                 |
 |-----------|-------------------------------------------------------------------------|
 | `init`    | Implemented — writes `.po/config.json`, creates tables               |
-| `create`  | Partially implemented — builds and validates the `Issue`, but does not yet persist it to the database |
-| `list`, `show`, `update`, `ready`, `close`, `block`, `comment`, `log` | Stubbed — `cli/*.py` and `core/commands/*.py` exist and register with `main.py`, but the underlying functions are `pass` (no-ops) |
+| `create`  | Implemented — persists the issue; with `--parent`, also adds a dependency edge and marks the new issue `blocked` |
+| `delete`  | Implemented — deletes an issue by ID |
+| `block`   | Implemented — adds a dependency edge between two issues and marks the blocked one `blocked` |
+| `list`, `show`, `update`, `ready`, `close`, `comment`, `log` | Stubbed — `cli/*.py` and `core/commands/*.py` exist and register with `main.py`, but the underlying functions are `pass` (no-ops) |
 
 ---
 
@@ -77,7 +79,8 @@ This README documents the intended contract for every command, not just what's w
 | `update`  | `<id>` `--status`                                                               | Patch an existing issue's status                       |
 | `ready`   | `None - though maybe date ASC or DESC in the future`                                                                          | Shortcut: status → `open`                       |
 | `close`   | `<id>`                                                                          | Shortcut: status → `closed`                            |
-| `block`   | `<from_id> <to_id>` `--type`                                                    | Declare a dependency edge between two issues           |
+| `delete`  | `<id>`                                                                          | Delete an issue                                        |
+| `block`   | `<from_id> <to_id>`                                                             | Declare that `from_id` must finish before `to_id`; `to_id` becomes `blocked` |
 | `comment` | `<id>` `--body` `--author`                                                      | Append a comment to an issue                            |
 | `log`     | `[id]`                                                                          | Event history — global if no ID, per-issue otherwise   |
 
@@ -137,7 +140,7 @@ This is where most of the semantic weight lives. The type isn't cosmetic — it 
 **Practical guidance:**
 
 - If you're not sure, use `task`. The type system only earns its keep when you're actually filtering by it.
-- There's no dedicated `epic` type yet — hierarchy is modeled purely with `--parent`, regardless of the parent issue's `type`. Create the container issue first (any type), then create children with `--parent <id>`.
+- There's no dedicated `epic` type yet. `--parent` links a new issue to an existing one of any `type`, and the new issue is blocked by it. Create the first issue, then create the issues that depend on it with `--parent <id>`.
 
 ---
 
@@ -171,7 +174,7 @@ If `--desc` is more than a sentence, it's doing real work.
 
 #### `--parent` (optional)
 
-The ID of an existing issue this one belongs to (any type — there's no dedicated `epic` type). Inserts a `parent` edge in the `dependencies` table automatically. You don't need to call `po block` separately.
+The ID of an existing issue that this one depends on (any type — there's no dedicated `epic` type). The parent must be finished before the new issue can be. `create` adds a dependency edge from the parent to the new issue in the `dependencies` table and sets the new issue's status to `blocked` instead of `open`. You don't need to call `po block` separately.
 
 ```
 po create --title "Build auth system" --type task
@@ -182,7 +185,28 @@ po create --title "Write token refresh logic" --type task --parent 63e9bf
 po create --title "Handle token expiry" --type chore --parent 63e9bf
 ```
 
-`po show 63e9bf` will list all children. `po list --type task` will show them in the main queue.
+Each of the three children starts as `blocked` by `63e9bf`. `po show 63e9bf` will list them as dependents. `po list --status blocked` will show them.
+
+---
+
+## `block` — Deep Dive
+
+Declares that one existing issue must be finished before another.
+
+```
+po block <from_id> <to_id>
+```
+
+- `from_id` is the issue that has to be resolved first. `to_id` is the issue that waits on it.
+- `to_id`'s status becomes `blocked`, unless it or `from_id` is already `closed`.
+- Both IDs must exist, an issue can't depend on itself, and the same edge can't be added twice. Each of these raises an error.
+
+```
+po block 0ed31e 02f2e1
+# → 0ed31e now blocks 02f2e1
+```
+
+Not enforced yet: `close` doesn't stop you from closing an issue that still has an unresolved blocker, and closing a blocker doesn't unblock the issues waiting on it. Circular dependencies aren't detected.
 
 ---
 
@@ -242,7 +266,6 @@ Four tables. Issue IDs are 6-character SHA-256 hex prefixes derived from the iss
 |---------|---------|-----------------------------------------------|
 | from_id | TEXT    | (PK) FK → issues.hash_id (the issue that does blocking)|
 | to_id   | TEXT    | (PK) FK → issues.hash_id (the issue being blocked)     |
-| type    | TEXT    | (PK) See edge type vocabulary below, default is blocks              |
 
 ### comments
 
@@ -287,13 +310,9 @@ Four tables. Issue IDs are 6-character SHA-256 hex prefixes derived from the iss
 | `feature`  | Normal flow. Has a user-facing outcome           |
 | `chore`    | Normal flow. No direct user-facing outcome       |
 
-### Dependency Edge Types
+### Dependency Edges
 
-| Type      | Meaning                                                |
-|-----------|--------------------------------------------------------|
-| `blocks`  | `from_id` must be resolved before `to_id` can proceed |
-| `parent`  | `from_id` is a child of `to_id` (hierarchy, e.g. a container issue's sub-tasks) |
-| `related` | Soft link — informational, no enforcement             |
+Every row in `dependencies` means one thing: `from_id` must be resolved before `to_id` can proceed. There are no edge types.
 
 ---
 
@@ -309,6 +328,6 @@ Four tables. Issue IDs are 6-character SHA-256 hex prefixes derived from the iss
 | 12 issue types                     | 4 types — dropped `epic`, `decision` (redundant with `task`)    |
 | `metadata` JSON field              | Not included initially — add when needed         |
 
-The core idea from beads that carries over unchanged: **every issue is a node, every dependency is a typed edge**. The graph is the source of truth for what's blocked and why.
+The core idea from beads that carries over unchanged: **every issue is a node, every dependency is an edge**. The graph is the source of truth for what's blocked and why.
 
 ---
