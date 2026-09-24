@@ -1,5 +1,5 @@
 import sqlite3
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -24,6 +24,15 @@ class SqliteAdapter:
     def get_record(self, table: str, id: str, key: str = "hash_id") -> dict | None:
         row = self.conn.execute(f"SELECT * FROM {table} WHERE {key} = ?", (id,)).fetchone()
         return dict(row) if row else None
+
+    def get_all_records(self, table: str, filters: dict, match_all: bool = True) -> List[dict] | None:
+        joiner = " AND " if match_all else " OR "
+        where_clause = joiner.join(f"{key} = ?" for key in filters)
+        values = tuple(filters.values())
+        query = f"SELECT * FROM {table} WHERE {where_clause}"
+        rows = self.conn.execute(query, values).fetchall()
+        result = [dict(row) for row in rows]
+        return result if result else None
 
     def update_record(self, table: str, id: str, data: dict, key: str = "hash_id") -> None:
         assignments = ", ".join(f"{column} = ?" for column in data)

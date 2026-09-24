@@ -1,18 +1,9 @@
-from pathlib import Path
-from typing import Protocol, Union
+from typing import List, Protocol, Union
 from core.schemas import Issue, Dependency, Comment, Event
 
 Model = Union[Issue, Dependency, Comment, Event]
 
 class StorageProtocol(Protocol):
-
-    def _get_configurations(self) -> Path:
-        """get database configuration, used as an internal helper for later methods"""
-        ...
-
-    def _connect_to_db(self) -> None:
-        """connecting itself to db as an internal helper"""
-        ...
 
     def create_tables(self) -> None:
         """create default tables for program"""
@@ -30,8 +21,16 @@ class StorageProtocol(Protocol):
         """restarting db"""
         ...
 
-    def title_exists(self, title: str) -> bool:
-        """check if an issue with this title already exists"""
+    def check_issue_title_exits(self, model: Model) -> bool:
+        """check if an issue with this model's title already exists"""
+        ...
+
+    def check_issue_parent_exists(self, model: Model) -> bool:
+        """check if an issue matching this model's parent already exists"""
+        ...
+
+    def get_all_issues(self, model: Model, status: str, type: str) -> List[dict] | None:
+        """fetch all issues, filtered by status and type"""
         ...
 
     def insert(self, model: Model) -> None:

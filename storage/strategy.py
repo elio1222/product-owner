@@ -4,7 +4,7 @@ import json
 from storage.protocol import Model
 from storage.adapters.protocol import AdapterProtocol
 from storage.adapters.sqlite import SqliteAdapter
-from typing import Tuple
+from typing import Tuple, List
 
 class StorageStrategy:
     """the one chef: business logic lives here, raw backend work is delegated to self.backend"""
@@ -35,12 +35,19 @@ class StorageStrategy:
         self.backend = backend
 
     @classmethod
-    def from_config(cls) -> "StorageStrategy":
+    def from_config(cls, config_path: Path | None = None) -> "StorageStrategy":
         # config.json only ever stores strings, so translating "backend": "sqlite"
         # into an actual SqliteAdapter has to happen somewhere, exactly once, here.
 
 
-        def get_configruations() -> Tuple[str, Path]:
+        def get_configruations(config_path: Path | None = None) -> Tuple[str, Path]:
+
+            if config_path:
+                with open(config_file, "r") as file:
+                    config = json.load(file)
+
+                return config["backend"], config["database_path"]
+            
             po_dir = Path(".po")
             config_file = f"{po_dir}/config.json"
 
@@ -49,7 +56,7 @@ class StorageStrategy:
 
             return config["backend"], config["database_path"]
             
-        backend_name, db_path = get_configruations()
+        backend_name, db_path = get_configruations(config_path=config_path)
 
         if not backend_name: # checks if backend name is None
             backend_name = "sqlite"
@@ -78,8 +85,38 @@ class StorageStrategy:
 
     def overwrite_db(self) -> None:
         self._drop_db()
-        self.create_tables()
+        self.initialize_backend()
 
+    def check_issue_title_exists(self, model: Model) -> bool:
+        m = model.model_dump()
+        table = self._table_map[type(model)]
+
+        record = self.backend.get_record(table, id=m["title"], key="title")
+        if record:
+            return True
+
+        return False
+
+    def check_issue_parent_exists(self, model: Model) -> bool:
+        m = model.model_dump()
+        table = self._table_map[type(model)]
+        record = self.backend.get_record(table, id=m["parent"], key="parent")
+        if record:
+            return True
+        return False
+
+    def get_all_issues(self, model: Model, status: str, type: str) -> List[dict] | None:
+        table = self._table_map[model]
+        filters = {
+            "status": status,
+            "type": type
+        }
+        if status and type:
+            match_all = True
+        else:
+            match_all = False
+        records = self.backend.get_all_records(table, filters, match_all)
+        return records
     def insert(self, model: Model) -> None:
         table = self._table_map[type(model)]
         self.backend.insert_record(table, model.model_dump())
