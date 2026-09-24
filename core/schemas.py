@@ -28,15 +28,16 @@ class Dependency(BaseModel):
     to_id: str
 
 class Comment(BaseModel):
-    id: int
+    id: Optional[int] = None  # None lets sqlite assign the INTEGER PRIMARY KEY
     issue_id: str
     body: str
-    author: Optional[str]
+    author: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.now)
 
     def model_post_init(self, __context):
-        config = get_config()
-        self.author = config["author"] if config["author"] else "root"
+        if self.author is None:
+            config = get_config()
+            self.author = config["author"] if config["author"] else "root"
 
 class Event(BaseModel):
     id: int

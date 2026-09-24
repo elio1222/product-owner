@@ -88,3 +88,27 @@ def format_issue(issue: dict, dependents: list[str] | None = None, comments: lis
                 lines.append(f"| {(key if n == 0 else '').ljust(key_width)} | {chunk.ljust(value_width)} |")
         lines.append(rule)
     return "\n".join(lines)
+
+def format_log(entries: list[tuple]) -> str:
+    """bordered table with one row per (timestamp, issue id, action, detail) entry, oldest first;
+    the detail column shrinks to fit the terminal"""
+    HEADER = ("WHEN", "ID", "ACTION", "DETAIL")
+    if not entries:
+        return "no log entries found"
+
+    rows = [(str(when)[:16].replace("T", " "), issue_id, action, detail) for when, issue_id, action, detail in entries]
+
+    widths = [max(len(r[c]) for r in [HEADER, *rows]) for c in range(len(HEADER))]
+    borders = 3 * len(HEADER) + 1
+    detail_room = max(shutil.get_terminal_size().columns - sum(widths[:-1]) - borders, 10)
+    widths[-1] = min(widths[-1], detail_room)
+
+    def cell(text: str, width: int) -> str:
+        return (text if len(text) <= width else text[: width - 1] + "…").ljust(width)
+
+    def line(row) -> str:
+        return "| " + " | ".join(cell(row[c], widths[c]) for c in range(len(widths))) + " |"
+
+    rule = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
+
+    return "\n".join([rule, line(HEADER), rule, *(line(r) for r in rows), rule])
