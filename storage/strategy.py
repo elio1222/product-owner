@@ -148,4 +148,4 @@ class StorageStrategy:
     def get(self, model_type: type[Model], id: str) -> Model | None:
         table = self._table_map[model_type]
         raw = self.backend.get_record(table, id, self._pk(model_type))
-        return model_type(**raw) if raw else None
+        return raw if raw else None
