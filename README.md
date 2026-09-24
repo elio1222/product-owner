@@ -75,7 +75,7 @@ This README documents the intended contract for every command, not just what's w
 | `list`    | `--status` `--type`                                                | Tabular list with optional filters                    |
 | `show`    | `<id>`                                                                          | Full issue detail: fields, dependencies, comments      |
 | `update`  | `<id>` `--status`                                                               | Patch an existing issue's status                       |
-| `ready`   | `<id>`                                                                          | Shortcut: status → `in_progress`                       |
+| `ready`   | `None - though maybe date ASC or DESC in the future`                                                                          | Shortcut: status → `open`                       |
 | `close`   | `<id>`                                                                          | Shortcut: status → `closed`                            |
 | `block`   | `<from_id> <to_id>` `--type`                                                    | Declare a dependency edge between two issues           |
 | `comment` | `<id>` `--body` `--author`                                                      | Append a comment to an issue                            |

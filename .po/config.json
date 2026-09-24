@@ -1,0 +1,8 @@
+{
+    "project": "product-owner",
+    "author": "eliorocha",
+    "email": "e.rocha1204@gmail.com",
+    "description": null,
+    "backend": "sqlite",
+    "database_path": ".po/database.sqlite"
+}

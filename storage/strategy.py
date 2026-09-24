@@ -105,7 +105,7 @@ class StorageStrategy:
             return True
         return False
 
-    def get_all_issues(self, model: Model, status: str, type: str) -> List[dict] | None:
+    def filter_all_issues(self, model: Model, status: str | None, type: str | None = None) -> List[dict] | None:
         table = self._table_map[model]
         filters = {
             "status": status,
